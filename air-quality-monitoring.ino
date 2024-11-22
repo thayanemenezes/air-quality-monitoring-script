@@ -7,9 +7,9 @@
 #define MQ135PIN 33
 #define DHTTYPE DHT11
 
-const char* ssid = "Menezes";
-const char* password = "Saturn@19#01";
-const String serverName = "http://192.168.15.8:3000/sensor-data";
+const char* ssid = "REDE";
+const char* password = "SENHA";
+const String serverName = "API-SERVER";
 const String sensorId = "esp32-001";
 
 DHT dht(DHTPIN, DHTTYPE);

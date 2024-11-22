@@ -2,8 +2,6 @@
 #include <HTTPClient.h>
 #include <DHT.h>
 #include <MQ135.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
 
 #define DHTPIN 32
 #define MQ135PIN 33
@@ -11,75 +9,114 @@
 
 const char* ssid = "Menezes";
 const char* password = "Saturn@19#01";
-const char* serverUrl = "http://192.168.15.8:3000/sensor-data";
-
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000);
+const String serverName = "http://192.168.15.8:3000/sensor-data";
+const String sensorId = "esp32-001";
 
 DHT dht(DHTPIN, DHTTYPE);
 MQ135 gasSensor(MQ135PIN);
 
 void setup() {
   Serial.begin(115200);
+
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Conectando ao WiFi...");
   }
   Serial.println("Conectado ao WiFi!");
-  timeClient.begin(); 
+
   dht.begin();
   delay(2000);
 }
 
 void loop() {
-  float temperature = dht.readTemperature();
-  float humidity = dht.readHumidity();
-  int co2 = gasSensor.getPPM();
-  int nh3 = random(5, 15);
-  int nox = random(10, 25);
-  int aqi = random(50, 100);
-
-  if (isnan(temperature) || isnan(humidity)) {
-    Serial.println("Falha na leitura do DHT!");
-    return;
-  }
-
   if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(serverUrl);
-    http.addHeader("Content-Type", "application/json");
+    float temperatura = dht.readTemperature();
+    float umidade = dht.readHumidity();
+    int co2 = gasSensor.getPPM();
+    int nh3 = random(10, 50); // Simulação para NH3
+    int nox = random(5, 30);  // Simulação para NOx
+    int aqi = random(50, 150); // Simulação para AQI
 
-    String payload = String("{\"sensor_id\": \"esp32-001\", \"timestamp\": \"") +
-                     getTimestamp() +
-                     String("\", \"data\": {\"temperature\": ") + String(temperature) +
-                     String(", \"humidity\": ") + String(humidity) +
-                     String(", \"gases\": {\"co2\": ") + String(co2) +
-                     String(", \"nh3\": ") + String(nh3) +
-                     String(", \"nox\": ") + String(nox) +
-                     String("}, \"aqi\": ") + String(aqi) +
-                     String("}, \"alerts\": {\"status\": \"ok\", \"messages\": []}}");
-
-    int httpResponseCode = http.POST(payload);
-
-    if (httpResponseCode > 0) {
-      Serial.print("Dados enviados! Código de resposta: ");
-      Serial.println(httpResponseCode);
-    } else {
-      Serial.print("Erro ao enviar os dados. Código de erro: ");
-      Serial.println(httpResponseCode);
+    if (isnan(temperatura) || isnan(umidade)) {
+      Serial.println("Falha na leitura do DHT!");
+      return;
     }
 
-    http.end();
-  } else {
-    Serial.println("WiFi desconectado! Dados não enviados.");
-  }
+    String timestamp = getTimestamp();
+    String jsonPayload = createJsonPayload(temperatura, umidade, co2, nh3, nox, aqi, timestamp);
 
-  delay(1800000);
+    if (checkSensorExists(sensorId)) {
+      sendPutRequest(sensorId, jsonPayload);
+    } else {
+      sendPostRequest(jsonPayload);
+    }
+  } else {
+    Serial.println("WiFi desconectado!");
+  }
+  delay(1800000); // 30 minutos
 }
 
 String getTimestamp() {
-  timeClient.update();
-  String formattedDate = timeClient.getFormattedDate(); 
-  return formattedDate;
+  time_t now = time(nullptr);
+  char buffer[20];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+  return String(buffer);
+}
+
+String createJsonPayload(float temperatura, float umidade, int co2, int nh3, int nox, int aqi, String timestamp) {
+  String payload = "{";
+  payload += "\"sensor_id\":\"" + sensorId + "\",";
+  payload += "\"timestamp\":\"" + timestamp + "\",";
+  payload += "\"data\":{";
+  payload += "\"temperature\":" + String(temperatura) + ",";
+  payload += "\"humidity\":" + String(umidade) + ",";
+  payload += "\"gases\":{";
+  payload += "\"co2\":" + String(co2) + ",";
+  payload += "\"nh3\":" + String(nh3) + ",";
+  payload += "\"nox\":" + String(nox) + "},";
+  payload += "\"aqi\":" + String(aqi) + "},";
+  payload += "\"alerts\":{\"status\":\"ok\",\"messages\":[]}";
+  payload += "}";
+  return payload;
+}
+
+bool checkSensorExists(String id) {
+  HTTPClient http;
+  String url = serverName + "?sensor_id=" + id; // Endpoint com query param
+  http.begin(url);
+  int httpCode = http.GET();
+
+  if (httpCode == 200) {
+    http.end();
+    return true;
+  } else {
+    http.end();
+    return false;
+  }
+}
+
+void sendPostRequest(String jsonPayload) {
+  HTTPClient http;
+  http.begin(serverName);
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.POST(jsonPayload);
+  Serial.println("POST Response Code: " + String(httpCode));
+  Serial.println("Payload: " + jsonPayload);
+
+  http.end();
+}
+
+void sendPutRequest(String id, String jsonPayload) {
+  HTTPClient http;
+  String url = serverName + "/" + id;
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.PUT(jsonPayload);
+  Serial.println("PUT Response Code: " + String(httpCode));
+  Serial.println("Payload: " + jsonPayload);
+
+  http.end();
 }

@@ -34,9 +34,9 @@ void loop() {
     float temperatura = dht.readTemperature();
     float umidade = dht.readHumidity();
     int co2 = gasSensor.getPPM();
-    int nh3 = random(10, 50); // Simulação para NH3
-    int nox = random(5, 30);  // Simulação para NOx
-    int aqi = random(50, 150); // Simulação para AQI
+    int nh3 = random(10, 50); 
+    int nox = random(5, 30); 
+    int aqi = random(50, 150); 
 
     if (isnan(temperatura) || isnan(umidade)) {
       Serial.println("Falha na leitura do DHT!");
@@ -54,7 +54,7 @@ void loop() {
   } else {
     Serial.println("WiFi desconectado!");
   }
-  delay(1800000); // 30 minutos
+  delay(1800000); 
 }
 
 String getTimestamp() {
@@ -83,7 +83,7 @@ String createJsonPayload(float temperatura, float umidade, int co2, int nh3, int
 
 bool checkSensorExists(String id) {
   HTTPClient http;
-  String url = serverName + "?sensor_id=" + id; // Endpoint com query param
+  String url = serverName + "?sensor_id=" + id; 
   http.begin(url);
   int httpCode = http.GET();
 

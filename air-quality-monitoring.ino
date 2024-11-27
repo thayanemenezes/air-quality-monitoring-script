@@ -8,17 +8,10 @@
 #define MQ135_PIN 33
 #define DHT_TYPE DHT11
 
-<<<<<<< HEAD
-const char* wifiSSID = "Menezes";
-const char* wifiPassword = "Saturn@19#01";
-const String apiServer = "http://localhost:3008/api/";
-const String sensorIdentifier = "esp32-001";
-=======
 const char* ssid = "REDE";
 const char* password = "SENHA";
 const String serverName = "API-SERVER";
 const String sensorId = "esp32-001";
->>>>>>> 100007cd32ea792bc88297bd51f3b1535ba1c213
 
 DHT dht(DHT_PIN, DHT_TYPE);
 MQ135 gasSensor(MQ135_PIN);
@@ -53,15 +46,10 @@ void loop() {
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
     int co2 = gasSensor.getPPM();
-<<<<<<< HEAD
-    int nh3 = random(10, 50);
-    int nox = random(5, 30);
-    int aqi = random(50, 150);
-=======
+
     int nh3 = random(10, 50); 
     int nox = random(5, 30); 
     int aqi = random(50, 150); 
->>>>>>> 100007cd32ea792bc88297bd51f3b1535ba1c213
 
     if (isnan(temperature) || isnan(humidity)) {
       Serial.println("DHT Reading Failed!");
@@ -83,11 +71,7 @@ void loop() {
   } else {
     Serial.println("WiFi Disconnected!");
   }
-<<<<<<< HEAD
   delay(300000); 
-=======
-  delay(1800000); 
->>>>>>> 100007cd32ea792bc88297bd51f3b1535ba1c213
 }
 
 String getTimestamp() {
@@ -132,11 +116,6 @@ String createJsonPayload(float temperature, float humidity, int co2, int nh3, in
   return payload;
 }
 
-<<<<<<< HEAD
-bool detectSmoke(int co2) {
-  int smokeThreshold = 1000; 
-  return co2 > smokeThreshold;
-=======
 bool checkSensorExists(String id) {
   HTTPClient http;
   String url = serverName + "?sensor_id=" + id; 
@@ -150,7 +129,6 @@ bool checkSensorExists(String id) {
     http.end();
     return false;
   }
->>>>>>> 100007cd32ea792bc88297bd51f3b1535ba1c213
 }
 
 void sendPostRequest(String jsonPayload) {

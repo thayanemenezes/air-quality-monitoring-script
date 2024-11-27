@@ -2,59 +2,75 @@
 #include <HTTPClient.h>
 #include <DHT.h>
 #include <MQ135.h>
+#include <time.h>
 
-#define DHTPIN 32
-#define MQ135PIN 33
-#define DHTTYPE DHT11
+#define DHT_PIN 32
+#define MQ135_PIN 33
+#define DHT_TYPE DHT11
 
-const char* ssid = "Menezes";
-const char* password = "Saturn@19#01";
-const String serverName = "http://192.168.15.8:3000/sensor-data";
-const String sensorId = "esp32-001";
+const char* wifiSSID = "Menezes";
+const char* wifiPassword = "Saturn@19#01";
+const String apiServer = "http://localhost:3008/api/";
+const String sensorIdentifier = "esp32-001";
 
-DHT dht(DHTPIN, DHTTYPE);
-MQ135 gasSensor(MQ135PIN);
+DHT dht(DHT_PIN, DHT_TYPE);
+MQ135 gasSensor(MQ135_PIN);
+
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffsetSec = 0;
+const int daylightOffsetSec = 0;
 
 void setup() {
   Serial.begin(115200);
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(wifiSSID, wifiPassword);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
-    Serial.println("Conectando ao WiFi...");
+    Serial.println("Connecting to WiFi...");
   }
-  Serial.println("Conectado ao WiFi!");
-
+  Serial.println("WiFi Connected!");
+  configTime(gmtOffsetSec, daylightOffsetSec, ntpServer);
   dht.begin();
   delay(2000);
+
+  Serial.println("Syncing with NTP Server...");
+  while (!time(nullptr)) {
+    delay(1000);
+    Serial.println(".");
+  }
+  Serial.println("Time Synced!");
 }
 
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    float temperatura = dht.readTemperature();
-    float umidade = dht.readHumidity();
+    float temperature = dht.readTemperature();
+    float humidity = dht.readHumidity();
     int co2 = gasSensor.getPPM();
-    int nh3 = random(10, 50); // Simulação para NH3
-    int nox = random(5, 30);  // Simulação para NOx
-    int aqi = random(50, 150); // Simulação para AQI
+    int nh3 = random(10, 50);
+    int nox = random(5, 30);
+    int aqi = random(50, 150);
 
-    if (isnan(temperatura) || isnan(umidade)) {
-      Serial.println("Falha na leitura do DHT!");
+    if (isnan(temperature) || isnan(humidity)) {
+      Serial.println("DHT Reading Failed!");
       return;
     }
 
-    String timestamp = getTimestamp();
-    String jsonPayload = createJsonPayload(temperatura, umidade, co2, nh3, nox, aqi, timestamp);
-
-    if (checkSensorExists(sensorId)) {
-      sendPutRequest(sensorId, jsonPayload);
+    bool smokeDetected = detectSmoke(co2);
+    if (smokeDetected) {
+      Serial.println("⚠️ Cigarette smoke detected!");
     } else {
-      sendPostRequest(jsonPayload);
+      Serial.println("No cigarette smoke detected.");
     }
+
+    String timestamp = getTimestamp();
+    String alertJson = generateAlert(co2, nh3, nox);
+    String jsonPayload = createJsonPayload(temperature, humidity, co2, nh3, nox, aqi, timestamp, alertJson, smokeDetected);
+
+    sendPostRequest(jsonPayload);
   } else {
-    Serial.println("WiFi desconectado!");
+    Serial.println("WiFi Disconnected!");
   }
-  delay(1800000); // 30 minutos
+  delay(300000); 
 }
 
 String getTimestamp() {
@@ -64,59 +80,61 @@ String getTimestamp() {
   return String(buffer);
 }
 
-String createJsonPayload(float temperatura, float umidade, int co2, int nh3, int nox, int aqi, String timestamp) {
+String generateAlert(int co2, int nh3, int nox) {
+  String status = "clear";
+  String message = "Low levels, nothing to worry about here...";
+
+  if ((co2 > 800 || nh3 > 50 || nox > 40) && (co2 <= 1200 && nh3 <= 100 && nox <= 80)) {
+    status = "medium";
+    message = "Medium gas levels alert.";
+  } else if (co2 > 1200 || nh3 > 100 || nox > 80) {
+    status = "danger";
+    message = "Dangerous gas levels!";
+  }
+
+  return "{\"status\":\"" + status + "\",\"messages\":[\"" + message + "\"]}";
+}
+
+String createJsonPayload(float temperature, float humidity, int co2, int nh3, int nox, int aqi, String timestamp, String alertJson, bool smokeDetected) {
   String payload = "{";
-  payload += "\"sensor_id\":\"" + sensorId + "\",";
+  payload += "\"sensor_id\":\"" + sensorIdentifier + "\",";
   payload += "\"timestamp\":\"" + timestamp + "\",";
   payload += "\"data\":{";
-  payload += "\"temperature\":" + String(temperatura) + ",";
-  payload += "\"humidity\":" + String(umidade) + ",";
+  payload += "\"temperature\":" + String(temperature) + ",";
+  payload += "\"humidity\":" + String(humidity) + ",";
   payload += "\"gases\":{";
   payload += "\"co2\":" + String(co2) + ",";
   payload += "\"nh3\":" + String(nh3) + ",";
   payload += "\"nox\":" + String(nox) + "},";
-  payload += "\"aqi\":" + String(aqi) + "},";
-  payload += "\"alerts\":{\"status\":\"ok\",\"messages\":[]}";
+  payload += "\"aqi\":" + String(aqi) + ",";
+  payload += "\"smoke_detected\":" + String(smokeDetected ? "true" : "false");
+  payload += "},";
+  payload += "\"alerts\":" + alertJson;
   payload += "}";
+
   return payload;
 }
 
-bool checkSensorExists(String id) {
-  HTTPClient http;
-  String url = serverName + "?sensor_id=" + id; // Endpoint com query param
-  http.begin(url);
-  int httpCode = http.GET();
-
-  if (httpCode == 200) {
-    http.end();
-    return true;
-  } else {
-    http.end();
-    return false;
-  }
+bool detectSmoke(int co2) {
+  int smokeThreshold = 1000; 
+  return co2 > smokeThreshold;
 }
 
 void sendPostRequest(String jsonPayload) {
   HTTPClient http;
-  http.begin(serverName);
+  http.begin(apiServer);
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(20000); 
 
   int httpCode = http.POST(jsonPayload);
   Serial.println("POST Response Code: " + String(httpCode));
-  Serial.println("Payload: " + jsonPayload);
+  if (httpCode > 0) {
+    String response = http.getString();
+    Serial.println("Response: " + response);
+  } else {
+    Serial.println("Falha ao enviar POST: " + http.errorToString(httpCode));
+  }
 
   http.end();
 }
 
-void sendPutRequest(String id, String jsonPayload) {
-  HTTPClient http;
-  String url = serverName + "/" + id;
-  http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-
-  int httpCode = http.PUT(jsonPayload);
-  Serial.println("PUT Response Code: " + String(httpCode));
-  Serial.println("Payload: " + jsonPayload);
-
-  http.end();
-}

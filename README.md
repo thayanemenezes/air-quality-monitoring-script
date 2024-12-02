@@ -1,7 +1,7 @@
 # Monitoramento de Qualidade do Ar com ESP32
 
 ## Descrição
-Este projeto utiliza uma ESP32 para monitorar dados ambientais, incluindo temperatura, umidade e qualidade do ar, com base em sensores DHT11 e MQ-135. Os dados capturados são enviados periodicamente (a cada 30 minutos) para uma API HTTP para armazenamento e análise.
+Este projeto utiliza uma ESP32 para monitorar dados ambientais, incluindo temperatura, umidade e qualidade do ar, com base em sensores DHT11 e MQ-135. Os dados capturados são enviados periodicamente para uma API HTTP para armazenamento e análise.
 
 ---
 
